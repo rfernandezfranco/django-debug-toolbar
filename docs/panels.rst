@@ -69,6 +69,50 @@ SQL
 
 SQL queries including time to execute and links to EXPLAIN each query.
 
+The panel also exposes an "Export SQL as JSON" action that downloads a
+machine-friendly snapshot of the collected queries. It calls the
+``/__debug__/sql_export/`` endpoint with the current ``request_id`` and returns
+indented JSON optimised for tools and LLMs. Example response:
+
+.. code-block:: json
+
+   {
+     "schema": "debug-toolbar.sql.v1",
+     "meta": {
+       "request_id": "abc123",
+       "sql_warning_threshold_ms": 500
+     },
+     "summary": {
+       "total_queries": 3,
+       "total_time_ms": 12.4,
+       "slow_queries": 1,
+       "duplicate_marked_queries": 1
+     },
+     "databases": [
+       {
+         "alias": "default",
+         "vendor": "postgresql",
+         "query_count": 3,
+         "time_spent_ms": 12.4
+       }
+     ],
+     "queries": [
+       {
+         "id": "6b0e",
+         "sql": "SELECT * FROM auth_user WHERE id = %s",
+         "duration_ms": 4.1,
+         "is_slow": false,
+         "params": {"id": 1},
+         "stacktrace": [{"file": "/app/views.py", "line": 12}],
+         "template_info": {"name": "template.html"}
+       }
+     ]
+   }
+
+All durations are reported in milliseconds. Parameters are parsed when possible.
+Stacktraces and template information stay text-only to keep the payload easy to
+process programmatically.
+
 Static files
 ~~~~~~~~~~~~
 

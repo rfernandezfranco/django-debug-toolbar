@@ -18,6 +18,14 @@
   {% endfor %}
 </ul>
 
+{% if request_id %}
+  <form class="djDebugSqlExport" method="get" action="{% url 'djdt:sql_export' %}">
+    <input type="hidden" name="request_id" value="{{ request_id }}">
+    <button type="submit" formtarget="_blank">{% translate "Export SQL as JSON" %}</button>
+    <span class="djDebugSqlExportHint">{% translate "Opens a machine-friendly snapshot of these queries." %}</span>
+  </form>
+{% endif %}
+
 {% if queries %}
   <table>
     <colgroup>

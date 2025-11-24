@@ -561,6 +561,50 @@ class DebugToolbarIntegrationTestCase(IntegrationTestCase):
             )
             self.assertEqual(response.status_code, 404)
 
+    def test_sql_export_returns_json(self):
+        self.client.get("/execute_sql/")
+        request_id = list(get_store().request_ids())[-1]
+
+        url = "/__debug__/sql_export/"
+        response = self.client.get(url, {"request_id": request_id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Disposition"],
+            f'attachment; filename="djdt-sql-{request_id}.json"',
+        )
+
+        payload = response.json()
+        self.assertEqual(payload["schema"], "debug-toolbar.sql.v1")
+        self.assertEqual(payload["meta"]["request_id"], request_id)
+        self.assertGreaterEqual(payload["summary"]["total_queries"], 1)
+        self.assertTrue(payload["queries"])
+        first_query = payload["queries"][0]
+        self.assertIn("sql", first_query)
+        self.assertIn("params", first_query)
+        self.assertIn("stacktrace", first_query)
+
+    def test_sql_export_requires_request_id(self):
+        url = "/__debug__/sql_export/"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 400)
+
+    def test_sql_export_rejects_missing_data(self):
+        url = "/__debug__/sql_export/"
+        response = self.client.get(url, {"request_id": "does-not-exist"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_sql_export_checks_show_toolbar(self):
+        self.client.get("/execute_sql/")
+        request_id = list(get_store().request_ids())[-1]
+        url = "/__debug__/sql_export/"
+
+        response = self.client.get(url, {"request_id": request_id})
+        self.assertEqual(response.status_code, 200)
+        with self.settings(INTERNAL_IPS=[]):
+            response = self.client.get(url, {"request_id": request_id})
+            self.assertEqual(response.status_code, 404)
+
     @override_settings(DEBUG_TOOLBAR_CONFIG={"RENDER_PANELS": True})
     def test_render_panels_in_request(self):
         """

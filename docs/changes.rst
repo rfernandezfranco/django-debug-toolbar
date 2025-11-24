@@ -4,6 +4,8 @@ Change log
 Pending
 -------
 
+* Added JSON export for the SQL panel to download machine-friendly query
+  reports.
 * Deprecated ``RedirectsPanel`` in favor of ``HistoryPanel`` for viewing
   toolbar data from redirected requests.
 * Fixed support for generating code coverage comments in PRs.

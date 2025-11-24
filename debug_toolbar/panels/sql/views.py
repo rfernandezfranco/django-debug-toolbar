@@ -1,12 +1,14 @@
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.template.loader import render_to_string
 from django.views.decorators.csrf import csrf_exempt
+from django.utils.translation import gettext as _
 
 from debug_toolbar._compat import login_not_required
 from debug_toolbar.decorators import render_with_toolbar_language, require_show_toolbar
 from debug_toolbar.forms import SignedDataForm
 from debug_toolbar.panels.sql.forms import SQLSelectForm
 from debug_toolbar.panels.sql.utils import reformat_sql
+from debug_toolbar.toolbar import DebugToolbar
 
 
 def get_signed_data(request):
@@ -104,3 +106,34 @@ def sql_profile(request):
         content = render_to_string("debug_toolbar/panels/sql_profile.html", context)
         return JsonResponse({"content": content})
     return HttpResponseBadRequest("Form errors")
+
+
+@login_not_required
+@require_show_toolbar
+@render_with_toolbar_language
+def sql_export(request):
+    """Return a structured JSON export of the SQL panel stats."""
+    from debug_toolbar.panels.sql import SQLPanel
+
+    request_id = request.GET.get("request_id")
+    if not request_id:
+        return HttpResponseBadRequest(
+            _("The 'request_id' query parameter is required.")
+        )
+
+    toolbar = DebugToolbar.fetch(request_id, SQLPanel.panel_id)
+    if toolbar is None:
+        content = _(
+            "Data for this panel isn't available anymore. "
+            "Please reload the page and retry."
+        )
+        return HttpResponseBadRequest(content)
+
+    panel = toolbar.get_panel_by_id(SQLPanel.panel_id)
+    payload = panel.get_export_data()
+
+    response = JsonResponse(payload, json_dumps_params={"indent": 2})
+    response["Content-Disposition"] = (
+        f'attachment; filename="djdt-sql-{request_id}.json"'
+    )
+    return response

@@ -1,3 +1,5 @@
+import contextlib
+import json
 import uuid
 from collections import defaultdict
 
@@ -194,6 +196,7 @@ class SQLPanel(Panel):
             path("sql_select/", views.sql_select, name="sql_select"),
             path("sql_explain/", views.sql_explain, name="sql_explain"),
             path("sql_profile/", views.sql_profile, name="sql_profile"),
+            path("sql_export/", views.sql_export, name="sql_export"),
         ]
 
     async def aenable_instrumentation(self):
@@ -214,12 +217,11 @@ class SQLPanel(Panel):
             connection._djdt_logger = None
 
     def generate_stats(self, request, response):
+        sql_warning_threshold = dt_settings.get_config()["SQL_WARNING_THRESHOLD"]
         similar_query_groups = defaultdict(list)
         duplicate_query_groups = defaultdict(list)
 
         if self._queries:
-            sql_warning_threshold = dt_settings.get_config()["SQL_WARNING_THRESHOLD"]
-
             width_ratio_tally = 0
             factor = int(256.0 / (len(self._databases) * 2.5))
             for n, db in enumerate(self._databases.values()):
@@ -304,7 +306,9 @@ class SQLPanel(Panel):
                     self._databases.items(), key=lambda x: -x[1]["time_spent"]
                 ),
                 "queries": self._queries,
+                "request_id": self.toolbar.request_id,
                 "sql_time": self._sql_time,
+                "sql_warning_threshold": sql_warning_threshold,
             }
         )
 
@@ -338,3 +342,135 @@ class SQLPanel(Panel):
                 query["trace_color"] = trace_colors[query["stacktrace"]]
 
             return render_to_string(self.template, stats)
+
+    def _deserialize_params(self, params):
+        if not params:
+            return None
+        with contextlib.suppress(ValueError, TypeError):
+            return json.loads(params)
+        return params
+
+    @staticmethod
+    def _format_stacktrace(stacktrace):
+        """
+        Convert the tuple-based stacktrace into a list of dictionaries that's easy to
+        consume programmatically. Falls back to a string representation if the data was
+        already rendered.
+        """
+        if not stacktrace:
+            return []
+        if isinstance(stacktrace, str):
+            return [{"text": stacktrace}]
+
+        formatted = []
+        for frame in stacktrace:
+            if not isinstance(frame, (list, tuple)):
+                formatted.append({"text": str(frame)})
+                continue
+            filename, line_no, func_name, code, frame_locals = (
+                list(frame) + [None] * 5
+            )[:5]
+            formatted.append(
+                {
+                    "file": filename,
+                    "line": line_no,
+                    "function": func_name,
+                    "code": code,
+                    "locals": frame_locals,
+                }
+            )
+        return formatted
+
+    @staticmethod
+    def _format_template_info(template_info):
+        if not template_info:
+            return None
+        context_lines = []
+        for line in template_info.get("context", []):
+            context_lines.append(
+                {
+                    "line": line.get("num"),
+                    "content": line.get("content"),
+                    "highlight": bool(line.get("highlight")),
+                }
+            )
+        return {"name": template_info.get("name"), "context": context_lines}
+
+    def get_export_data(self):
+        stats = self.get_stats()
+        queries_export = []
+        vendors_by_alias = {}
+
+        for query in stats.get("queries", []):
+            params = self._deserialize_params(query.get("params"))
+            stacktrace = self._format_stacktrace(query.get("stacktrace"))
+            template_info = self._format_template_info(query.get("template_info"))
+
+            vendors_by_alias.setdefault(query.get("alias"), query.get("vendor"))
+            queries_export.append(
+                {
+                    "id": query.get("djdt_query_id"),
+                    "sql": query.get("raw_sql") or query.get("sql"),
+                    "duration_ms": query.get("duration"),
+                    "alias": query.get("alias"),
+                    "vendor": query.get("vendor"),
+                    "is_select": query.get("is_select", False),
+                    "is_slow": query.get("is_slow", False),
+                    "params": params,
+                    "transaction": {
+                        "id": query.get("trans_id"),
+                        "status": query.get("trans_status"),
+                        "isolation_level": query.get("iso_level"),
+                    },
+                    "similarity": {
+                        "similar_count": query.get("similar_count", 0),
+                        "duplicate_count": query.get("duplicate_count", 0),
+                    },
+                    "timeline": {
+                        "offset_start_pct": query.get("start_offset", 0),
+                        "offset_end_pct": query.get("end_offset", 0),
+                        "relative_width_pct": query.get("width_ratio", 0),
+                    },
+                    "stacktrace": stacktrace,
+                    "template_info": template_info,
+                }
+            )
+
+        databases_export = []
+        for alias, info in stats.get("databases", []):
+            databases_export.append(
+                {
+                    "alias": alias,
+                    "vendor": vendors_by_alias.get(alias),
+                    "time_spent_ms": info.get("time_spent", 0),
+                    "query_count": info.get("num_queries", 0),
+                    "similar_query_count": info.get("similar_count", 0),
+                    "duplicate_query_count": info.get("duplicate_count", 0),
+                }
+            )
+
+        total_queries = len(queries_export)
+        slow_queries = sum(1 for q in queries_export if q["is_slow"])
+        select_queries = sum(1 for q in queries_export if q["is_select"])
+        duplicate_queries = sum(
+            1
+            for q in queries_export
+            if q["similarity"]["duplicate_count"] or q["similarity"]["similar_count"]
+        )
+
+        return {
+            "schema": "debug-toolbar.sql.v1",
+            "meta": {
+                "request_id": stats.get("request_id"),
+                "sql_warning_threshold_ms": stats.get("sql_warning_threshold"),
+            },
+            "summary": {
+                "total_queries": total_queries,
+                "total_time_ms": stats.get("sql_time", 0),
+                "slow_queries": slow_queries,
+                "select_queries": select_queries,
+                "duplicate_marked_queries": duplicate_queries,
+            },
+            "databases": databases_export,
+            "queries": queries_export,
+        }
