@@ -26,6 +26,11 @@ from debug_toolbar.utils import clear_stack_trace_caches, is_processable_html_re
 _HTML_TYPES = ("text/html", "application/xhtml+xml")
 
 
+@cache
+def get_insert_before_pattern(insert_before: str) -> re.Pattern:
+    return re.compile(re.escape(insert_before), re.IGNORECASE)
+
+
 def show_toolbar(request: HttpRequest) -> bool:
     """
     Default function to determine whether to show the toolbar on a given page.
@@ -204,11 +209,15 @@ class DebugToolbarMiddleware:
         # Insert the toolbar in the response.
         content = response.content.decode(response.charset)
         insert_before = dt_settings.get_config()["INSERT_BEFORE"]
-        pattern = re.escape(insert_before)
-        bits = re.split(pattern, content, flags=re.IGNORECASE)
-        if len(bits) > 1:
-            bits[-2] += rendered
-            response.content = insert_before.join(bits)
+        pattern = get_insert_before_pattern(insert_before)
+
+        last_match = None
+        for last_match in pattern.finditer(content):
+            pass
+
+        if last_match:
+            insert_at = last_match.start()
+            response.content = content[:insert_at] + rendered + content[insert_at:]
             if "Content-Length" in response:
                 response["Content-Length"] = len(response.content)
         return response
