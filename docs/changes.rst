@@ -18,6 +18,8 @@ Pending
 * Added test to confirm Django's ``TestCase.assertNumQueries`` works.
 * Improved toolbar injection performance by caching the insert marker pattern
   and avoiding full response splits.
+* Reduced overhead in the in-memory store by keeping panel data without JSON
+  serialization while still returning copies.
 
 6.1.0 (2025-10-30)
 ------------------

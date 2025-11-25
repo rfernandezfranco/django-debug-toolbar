@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import json
 from collections import defaultdict, deque
 from collections.abc import Iterable
@@ -115,7 +116,7 @@ class MemoryStore(BaseStore):
     def save_panel(cls, request_id: str, panel_id: str, data: Any = None):
         """Save the panel data for the given request_id"""
         cls.set(request_id)
-        cls._request_store[request_id][panel_id] = serialize(data)
+        cls._request_store[request_id][panel_id] = copy.deepcopy(data)
 
     @classmethod
     def panel(cls, request_id: str, panel_id: str) -> Any:
@@ -125,7 +126,7 @@ class MemoryStore(BaseStore):
         except KeyError:
             return {}
         else:
-            return deserialize(data)
+            return copy.deepcopy(data)
 
     @classmethod
     def panels(cls, request_id: str) -> Any:
@@ -135,7 +136,7 @@ class MemoryStore(BaseStore):
         except KeyError:
             return {}
         for panel, data in panel_mapping.items():
-            yield panel, deserialize(data)
+            yield panel, copy.deepcopy(data)
 
 
 class DatabaseStore(BaseStore):
