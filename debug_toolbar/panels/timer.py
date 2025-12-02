@@ -2,6 +2,7 @@ from time import perf_counter
 
 from django.template.loader import render_to_string
 from django.templatetags.static import static
+from django.urls import path
 from django.utils.translation import gettext_lazy as _
 
 from debug_toolbar.panels import Panel
@@ -39,6 +40,14 @@ class TimerPanel(Panel):
 
     template = "debug_toolbar/panels/timer.html"
 
+    @classmethod
+    def get_urls(cls):
+        from debug_toolbar.panels import timer_views
+
+        return [
+            path("timer_export/", timer_views.timer_export, name="timer_export"),
+        ]
+
     @property
     def content(self):
         stats = self.get_stats()
@@ -52,7 +61,10 @@ class TimerPanel(Panel):
                 _("%(vcsw)d voluntary, %(ivcsw)d involuntary") % stats,
             ),
         )
-        return render_to_string(self.template, {"rows": rows})
+        return render_to_string(
+            self.template,
+            {"rows": rows, "request_id": self.toolbar.request_id},
+        )
 
     @property
     def scripts(self):
@@ -109,6 +121,7 @@ class TimerPanel(Panel):
             #        stats['urss'] = self._end_rusage.ru_idrss
             #        stats['usrss'] = self._end_rusage.ru_isrss
 
+        stats["request_id"] = self.toolbar.request_id
         self.record_stats(stats)
 
     def generate_server_timing(self, request, response):
@@ -124,3 +137,29 @@ class TimerPanel(Panel):
     @staticmethod
     def _elapsed_ru(start, end, name):
         return end.get(name) - start.get(name)
+
+    def get_export_data(self):
+        stats = self.get_stats()
+        return {
+            "schema": "debug-toolbar.timer.v1",
+            "meta": {
+                "request_id": stats.get("request_id"),
+                "resource_usage_supported": self.has_content,
+            },
+            "timing": {
+                "wall_time_ms": stats.get("total_time"),
+                "cpu_time_ms": {
+                    "user": stats.get("utime"),
+                    "system": stats.get("stime"),
+                    "total": stats.get("total"),
+                },
+                "context_switches": {
+                    "voluntary": stats.get("vcsw"),
+                    "involuntary": stats.get("ivcsw"),
+                },
+                "page_faults": {
+                    "minor": stats.get("minflt"),
+                    "major": stats.get("majflt"),
+                },
+            },
+        }

@@ -18,6 +18,8 @@ Pending
   ``debug_toolbar.store.DatabaseStore`` with ``SKIP_TOOLBAR_QUERIES``.
 * Fixed font family for code blocks and stack traces in the toolbar.
 * Added test to confirm Django's ``TestCase.assertNumQueries`` works.
+* Added JSON export for the timer panel to download timing stats per request,
+  including optional browser timing data when available.
 
 6.1.0 (2025-10-30)
 ------------------

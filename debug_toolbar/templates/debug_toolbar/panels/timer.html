@@ -1,5 +1,13 @@
 {% load i18n %}
 <h4>{% translate "Resource usage" %}</h4>
+{% if request_id %}
+  <form class="djDebugTimerExport" method="get" action="{% url 'djdt:timer_export' %}">
+    <input type="hidden" name="request_id" value="{{ request_id }}">
+    <input type="hidden" name="browser_timing" value="">
+    <button type="submit" formtarget="_blank">{% translate "Export timing as JSON" %}</button>
+    <span class="djDebugTimerExportHint">{% translate "Opens a machine-friendly snapshot of this timing data." %}</span>
+  </form>
+{% endif %}
 <table>
   <colgroup>
     <col class="djdt-width-20">

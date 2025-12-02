@@ -4,6 +4,7 @@ function insertBrowserTiming() {
     const timingOffset = performance.timing.navigationStart;
     const timingEnd = performance.timing.loadEventEnd;
     const totalTime = timingEnd - timingOffset;
+    const timingPayload = [];
     function getLeft(stat) {
         if (totalTime !== 0) {
             return (
@@ -45,6 +46,11 @@ function insertBrowserTiming() {
                 "width",
                 getCSSWidth(stat, endStat)
             );
+            timingPayload.push({
+                name: stat.replace("Start", ""),
+                start_ms: elapsed,
+                duration_ms: duration,
+            });
         } else {
             // Render a point in time
             row.innerHTML = `
@@ -53,6 +59,10 @@ function insertBrowserTiming() {
 <td>${elapsed}</td>
 `;
             row.querySelector("rect").setAttribute("width", 2);
+            timingPayload.push({
+                name: stat,
+                start_ms: elapsed,
+            });
         }
         row.querySelector("rect").setAttribute("x", getLeft(stat));
         tbody.appendChild(row);
@@ -72,6 +82,13 @@ function insertBrowserTiming() {
         addRow(tbody, "domContentLoadedEventStart", "domContentLoadedEventEnd");
         addRow(tbody, "loadEventStart", "loadEventEnd");
         browserTiming.classList.remove("djdt-hidden");
+
+        const hiddenInput = document.querySelector(
+            ".djDebugTimerExport input[name='browser_timing']"
+        );
+        if (hiddenInput) {
+            hiddenInput.value = JSON.stringify(timingPayload);
+        }
     }
 }
 
