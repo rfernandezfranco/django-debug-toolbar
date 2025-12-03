@@ -1,10 +1,26 @@
 import { $$ } from "./utils.js";
 
+let timingPayload = null;
+
+function setBrowserTimingInput(payload) {
+    const hiddenInput = document.querySelector(
+        ".djDebugTimerExport input[name='browser_timing']"
+    );
+    if (hiddenInput) {
+        hiddenInput.value = JSON.stringify(payload);
+    }
+}
+
 function insertBrowserTiming() {
+    const browserTiming = document.getElementById("djDebugBrowserTiming");
+    if (!browserTiming) {
+        return;
+    }
+
     const timingOffset = performance.timing.navigationStart;
     const timingEnd = performance.timing.loadEventEnd;
     const totalTime = timingEnd - timingOffset;
-    const timingPayload = [];
+    const localTimingPayload = [];
     function getLeft(stat) {
         if (totalTime !== 0) {
             return (
@@ -46,7 +62,7 @@ function insertBrowserTiming() {
                 "width",
                 getCSSWidth(stat, endStat)
             );
-            timingPayload.push({
+            localTimingPayload.push({
                 name: stat.replace("Start", ""),
                 start_ms: elapsed,
                 duration_ms: duration,
@@ -59,7 +75,7 @@ function insertBrowserTiming() {
 <td>${elapsed}</td>
 `;
             row.querySelector("rect").setAttribute("width", 2);
-            timingPayload.push({
+            localTimingPayload.push({
                 name: stat,
                 start_ms: elapsed,
             });
@@ -68,7 +84,6 @@ function insertBrowserTiming() {
         tbody.appendChild(row);
     }
 
-    const browserTiming = document.getElementById("djDebugBrowserTiming");
     // Determine if the browser timing section has already been rendered.
     if (browserTiming.classList.contains("djdt-hidden")) {
         const tbody = document.getElementById("djDebugBrowserTimingTableBody");
@@ -82,13 +97,11 @@ function insertBrowserTiming() {
         addRow(tbody, "domContentLoadedEventStart", "domContentLoadedEventEnd");
         addRow(tbody, "loadEventStart", "loadEventEnd");
         browserTiming.classList.remove("djdt-hidden");
+        timingPayload = localTimingPayload;
+    }
 
-        const hiddenInput = document.querySelector(
-            ".djDebugTimerExport input[name='browser_timing']"
-        );
-        if (hiddenInput) {
-            hiddenInput.value = JSON.stringify(timingPayload);
-        }
+    if (timingPayload) {
+        setBrowserTimingInput(timingPayload);
     }
 }
 
@@ -97,3 +110,8 @@ const djDebug = document.getElementById("djDebug");
 // script to miss the initial panel load event.
 insertBrowserTiming();
 $$.onPanelRender(djDebug, "TimerPanel", insertBrowserTiming);
+
+const exportForm = document.querySelector(".djDebugTimerExport");
+if (exportForm) {
+    exportForm.addEventListener("submit", insertBrowserTiming);
+}
